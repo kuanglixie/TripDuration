@@ -1,0 +1,195 @@
+
+# Goal: 
+  1. Get comfortable with the data
+  2. find magic features
+
+
+# Intuition about the data
+
+## Get domain knowledge
+
+## Check if the data is intuitive (agree with domain knowledge)
+
+## Understand how the data was generated (distribution difference between training and teting)
+
+
+
+# Basic exploration
+
+## None or NaN value
+
+### count the number of NaN or None per column and row
+
+## Remove constant features
+
+## Remove duplicated features
+
+
+```R
+# rows
+## total number of duplicated rows
+sum(duplicated(x))
+x[!duplicated(x)]
+
+# columns (only for categorical features)
+
+## factorize all columns
+factor_order <- function(x) {
+  as.factor(x, unique(x))
+}
+xnew <- x[, lapply(.SD, factor_order)]
+
+all_cols = colnames(xnew)
+cat("Current column names:", all_cols)
+col_len = length(all_cols)
+dup_cols = list()
+for (i1 in 1:(col_len - 1) {
+  col1 = all_cols[i1]
+  for (i2 in (i1 + 1):col_len) {
+    col2 = all_cols[i2]
+    if (!col2 %in% names(dup_cols) && all(xnew[[col1]] == xnew[[col2]])) {
+      dup_cols[[col2]] = col1
+    }
+  }
+}
+
+cat("Duplicated columns:")
+cat(dup_cols)
+
+# save duplicated columns
+saveRDS(dup_cols, file.path(rdat_dir, "duplicated_cols.RDS"))
+
+# checking what kinds of features are they
+summary(x[, names(dup_cols), with = FALSE])
+```
+
+## Unique value distribution
+
+```R
+num_feat = c()
+cat_feat = c()
+```
+
+### Continues
+
+#### Taking mod? Or create other features?
+
+#### Any outliers?
+
+### 
+
+## Any special type for each column?
+
+## Any categorical data? Any discrete data? 
+
+### For categorical features, count each category
+
+## How many times one feature is greater than the other and create cross tabel out of it. 
+
+```R
+gt_matrix <- function(x) {
+}
+```
+
+## time related variable: take the difference between original time and the current time
+
+
+
+# Anonymized features
+
+## try to decode variable and guess the true meaning of the feature
+
+## Guess the featuer types: take diff and scale back if the feature is scaled
+
+## The relation between index or id with those data.
+ 
+
+# Baseline model (use as a guidance for following analysis)
+
+
+
+
+# Explore feature relations
+
+
+## Individual features
+
+### feature distributions (both train and test)
+
+#### identify possible NaN
+
+### index vs value
+
+### statistics
+
+
+## Pairs
+
+### pairwise scatter plot, scatter matrix
+
+#### identify possible NaN
+
+### Checking pairwise relation difference between training and testing
+
+
+## Groups
+
+### corrplot + clustering
+
+#### index vs feature statistics
+
+### possible new features
+
+
+
+# Understand how the data was generated (distribution difference between training and teting)
+
+## Checking pairwise relation difference between training and testing
+
+## Find the id that identify each item
+
+code example:
+```python
+import itertools
+
+# This function looks for a combination of elements 
+# with product of 639360 
+def find_prod(data):
+    # combinations of not more than 5 features
+    for n in range(1, 5):
+        # iterate through all combinations
+        for c in itertools.combinations(range(len(data)), n):
+            if data[list(c)].prod() == 639360:
+                print test_nunique.index[c]
+                return
+    print 'Nothing found'
+
+    
+find_prod(test_nunique.values)
+```
+
+```python
+import itertools
+
+def find_ncombinations(data):
+    # combinations of not more than 5 features
+    for n in range(1, 5):
+        for c in itertools.combinations(range(data.shape[1]), n):
+            print c
+            columns = test.columns[list(c)]
+            if test[columns].drop_duplicates().shape[0] == 639360:
+                print columns
+                return
+    print 'Nothing found'
+
+find_ncombinations(test)
+```python
+
+
+# Validation
+
+  1. whether the validation is extensive (K-fold multiple seed)
+  2. correct split strategy
+  3. same distribution between validation and test
+  4. tune on one split, and evaluate score on the other
+
