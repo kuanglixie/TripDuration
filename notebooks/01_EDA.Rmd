@@ -26,6 +26,7 @@ nrow(train_dt)
 nrow(test_dt)
 ```
 
+Subsampling to get a subset for analysis.
 
 ```{r}
 fwrite(train_dt %>% sample_frac(0.1), file = "../data/train_sub.csv")
