@@ -55,4 +55,4 @@ The `duration` and `distance` features got from OSRM is very promising and can s
 
 After profiling the code, I found that the main bottleneck here is the http request to OSRM service (the `RCurl` call). If I have more time, I would write a distributed code to send request using multiple threads and deploy to several small size AWS (Amazon Web Service) instances. I would guess OSRM service will have some limitation for each IP address, so I will also need to tune the number of request/s per IP.
 
-Data from OSRM provide a much more accurate distance and duration estimation between start and end location, if no other traffic condition. However, for a real-time service, we need to have our own service for fast route calculation.
+Data from OSRM provide a much more accurate distance and duration estimation between start and end location, if no other traffic condition. However, for a real-time service, we need to have our own service for fast route calculation. We can even pre-compute the duration between famouse locations.
