@@ -1,0 +1,70 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is for generating all shortest path for each trip.
+
+# Load libraries
+
+```{r}
+library("data.table")
+library("tidyverse")
+library("ggplot2")
+library("lubridate")
+library("osrm")
+```
+
+## Load data
+
+```{r}
+train_dt = fread("../data/raw/train.csv")
+test_dt = fread("../data/raw/test.csv")
+```
+
+```{r}
+cb_dt <- bind_rows(train_dt %>% mutate(dset = "train"), 
+                   test_dt %>% mutate(dset = "test",
+                                     duration = NA))
+cb_dt <- cb_dt %>% mutate(dset = factor(dset), id = row_number())
+```
+
+```{r}
+# get trip duration and distance
+## cb_dt
+#fast_trip <- 
+cb_dt$fast_duration = 0
+cb_dt$fast_distance = 0
+
+for (i in 1:nrow(cb_dt)) {
+  cval = osrmRoute(src = cb_dt[i, c("row_id", "start_lng","start_lat")], cb_dt[i, c("row_id", "end_lng","end_lat")], overview = FALSE)
+  cb_dt[i, "fast_duration"] = cval[["duration"]]
+  cb_dt[i, "fast_distance"] = cval[["distance"]]
+}
+
+saveRDS(cb_dt, file = "../data/interim/fast_route_basic.RDS")
+```
+```{r}
+# get trip duration and distance
+## cb_dt
+#fast_trip <- 
+cb_dt$fast_duration = 0
+cb_dt$fast_distance = 0
+
+dt_list = list()
+for (i in 1:nrow(cb_dt)) {
+  cval = osrmRoute(src = cb_dt[i, c("row_id", "start_lng","start_lat")], cb_dt[i, c("row_id", "end_lng","end_lat")], sp = TRUE, overview = "full")
+  cb_dt[i, "fast_duration"] = cval[["duration"]]
+  cb_dt[i, "fast_distance"] = cval[["distance"]]
+  
+  coordinates(route)[[1]][[1]] %>% sample_n(route/10*30)
+}
+
+saveRDS(cb_dt, file = "../data/interim/fast_route_basic.RDS")
+```
+
+
+```{r}
+data.frame(coordinates(route)[[1]][[1]] %>% sample_n(19.0176/10*30)) %>% ggplot(aes(x = lon, y = lat)) + geom_point()
+```
+

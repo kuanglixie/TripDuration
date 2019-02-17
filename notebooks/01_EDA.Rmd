@@ -31,6 +31,12 @@ test_dt = fread("../data/raw/test.csv")
 ```
 
 ```{r}
+# data from 02_OSRM.Rmd
+fast_route = readRDS("../data/interim/fast_route_basic.RDS")
+```
+
+
+```{r}
 c(nrow(train_dt), nrow(test_dt))
 head(train_dt)
 head(test_dt)
@@ -71,7 +77,12 @@ set.seed(SEED)
 tmp = cb_dt %>% group_by(dset) %>% sample_n(5000)
 
 tmp %>%
-  ggplot(aes(x = start_lng, y = start_lat, color = dset)) + geom_point(alpha = 0.1) + facet_wrap(~dset)
+  filter(start_lng > -75 & start_lng < -73) %>%
+  filter(start_lat > 40 & start_lat < 42) %>%
+  ggplot(aes(x = start_lng, y = start_lat, color = dset)) + 
+  geom_point(alpha = 0.1, size = 0.2) + 
+  coord_cartesian(xlim = c(-74.02,-73.77), ylim = c(40.63,40.84)) +
+  facet_wrap(~dset)
 
 tmp %>% 
   filter(dset == "train") %>%
@@ -104,9 +115,15 @@ train_dt %>%
       as.POSIXct(start_timestamp, origin="1970-01-01")
       ))
   ) %>% 
-  #{range(.$start_datetime)}
+  mutate(hour = hour(pickup_datetime),
+         month = as.integer(month(pickup_datetime)),
+         wday =  wday(pickup_datetime, label = TRUE),
+         wday = as.integer(fct_relevel(wday, c("Sun", "Sat", "Mon", "Tues", "Wed", "Thurs", "Fri"))),
+         )
+```
 
-  mutate(hpick = hour(pickup_datetime)) %>%
+
+```{r}
   group_by(hpick) %>%
   summarise(median_duration = median(duration)/60) %>%
   ggplot(aes(hpick, median_duration)) +
