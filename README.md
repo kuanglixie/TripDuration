@@ -9,7 +9,7 @@ The most important element would affect the trip duration is the geo distance be
 
 However, the relationship between trip duration and distance is not linear(as shown by plots in EDA). This lead to another important factor, the travel speed. Compared to the distance, the speed is more difficult to predict. I identified the features that would affect the speed. Many features related to the pick-up time and drop-off time, like hour of the day and day of week. There are also features related to the geo location, like the start_lat and start_lng. These nearby traffic features might have more predictive power if we take both time dimension and geo dimension into consideration. I cluster trips that happen within certain geo and time intervals. 
 
-For the details of my strategies, you can read `notebooks/01_EDA.Rmd` , which include data wrangling, exploratory data analysis and feature engineering. 
+For the details of my strategies, you can read `notebooks/01_EDA.nb.html` , which include data wrangling, exploratory data analysis and feature engineering. 
 
 I use lightgbm package to implement Gradient Boosting Tree. There several reason for this selection. Firstly, we want to capture the interactions between features and the nonlinear relationship between features and target variable. Secondly, we have many categorical variables, and tree-based models have advantage to deal with them. Third, since I only have 24 hours for this project, I need to choose a model that is fast to implement. The code is located at `src/models/train_model.py`.
 
