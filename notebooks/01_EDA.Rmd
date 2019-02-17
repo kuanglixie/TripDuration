@@ -9,12 +9,59 @@ output: html_notebook
 ## Load libraries
 
 ```{r}
-library("data.table")
-library("tidyverse")
-library("ggplot2")
-library("lubridate")
-library("leaflet")
-library("leaflet.extras")
+library('ggplot2') # visualisation
+library('scales') # visualisation
+library('grid') # visualisation
+library('RColorBrewer') # visualisation
+library('alluvial') # visualisation
+library('dplyr') # data manipulation
+library('readr') # input/output
+library('data.table') # data manipulation
+library('tibble') # data wrangling
+library('tidyr') # data wrangling
+library('stringr') # string manipulation
+library('forcats') # factor manipulation
+library('lubridate') # date and time
+library('geosphere') # geospatial locations
+library('leaflet') # maps
+library('leaflet.extras') # maps
+library('maps') # maps
+
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
 ```
 
 ## Some parameter settings
@@ -26,13 +73,13 @@ SEED=20190216
 ## Load data
 
 ```{r}
-train_dt = fread("../data/raw/train.csv")
-test_dt = fread("../data/raw/test.csv")
+train_dt = fread("~/GitHub/TripDuration/data/raw/train_sub.csv")
+test_dt = fread("~/GitHub/TripDuration/data/raw/train_sub.csv")
 ```
 
 ```{r}
 # data from 02_OSRM.Rmd
-fast_route = readRDS("../data/interim/fast_route_basic.RDS")
+#fast_route = readRDS("../data/interim/fast_route_basic.RDS")
 ```
 
 
@@ -59,6 +106,7 @@ cb_dt <- bind_rows(train_dt %>% mutate(dset = "train"),
                    test_dt %>% mutate(dset = "test",
                                      duration = NA))
 cb_dt <- cb_dt %>% mutate(dset = factor(dset))
+
 ```
 
 ### Time range for train and test
@@ -108,8 +156,7 @@ The location mostly focus on Manhattan area.  Another notable hot-spot is JFK an
 I think I can safely assume the origin date for UNIX time is 1970-01-01. However, the time zone can be tricky. I assume the number of taxi trips during the night are usually less than those during the day. The current time zone seems to make sense.
 
 ```{r}
-#train_dt = 
-train_dt %>%
+train_dt = train_dt %>%
   mutate(pickup_datetime = with_tz(
     as_datetime(
       as.POSIXct(start_timestamp, origin="1970-01-01")
@@ -117,49 +164,223 @@ train_dt %>%
   ) %>% 
   mutate(hour = hour(pickup_datetime),
          month = as.integer(month(pickup_datetime)),
-         wday =  wday(pickup_datetime, label = TRUE),
-         wday = as.integer(fct_relevel(wday, c("Sun", "Sat", "Mon", "Tues", "Wed", "Thurs", "Fri"))),
+         wday0 =  wday(pickup_datetime, label = TRUE),
+         wday = as.integer(fct_relevel(wday0, c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri","Sat"))),
+         wday_r = as.integer(fct_relevel(wday0, c("Sun", "Sat", "Mon", "Tue", "Wed", "Thu", "Fri")))
          )
 ```
 
+## Feature Selection
 
+### Distribution of trip duration
 ```{r}
-  group_by(hpick) %>%
-  summarise(median_duration = median(duration)/60) %>%
-  ggplot(aes(hpick, median_duration)) +
-  geom_smooth(method = "loess", span = 1/2) +
-  geom_point(size = 4) +
-  labs(x = "Hour of the day", y = "Median trip duration [min]") +
-  theme(legend.position = "none")
-  
-  #mutate(pickup_datetime = )
+train_dt %>%
+  ggplot(aes(duration)) +
+  geom_histogram(fill = "red", bins = 150) +
+  scale_x_log10() +
+  scale_y_sqrt()
 ```
 
+
+### Relation between trip duration and distance
+
+```{r}
+pick_coord <- train_dt %>%
+
+  select(start_lng, start_lat)
+
+drop_coord <- train_dt %>%
+
+  select(end_lng, end_lat)
+
+train_dt$dist <- distCosine(pick_coord, drop_coord)
+
+train_dt$bearing = bearing(pick_coord, drop_coord)
+
+set.seed(4321)
+
+train_dt %>%
+
+  sample_n(5e4) %>%
+
+  ggplot(aes(dist, duration)) +
+
+  geom_point() +
+
+  scale_x_log10() +
+
+  scale_y_log10() +
+
+  labs(x = "Direct distance [m]", y = "Trip duration [s]")
+
+
+```
 
 ```{r}
 train_dt %>%
-  mutate(hpick = hour(pickup_datetime)) %>%
-  group_by(hpick, vendor_id) %>%
-  summarise(median_duration = median(trip_duration)/60) %>%
-  ggplot(aes(hpick, median_duration, color = vendor_id)) +
-  geom_smooth(method = "loess", span = 1/2) +
-  geom_point(size = 4) +
-  labs(x = "Hour of the day", y = "Median trip duration [min]") +
-  theme(legend.position = "none")
+
+  filter(duration < 3600 & duration > 120) %>%
+
+  filter(dist > 100 & dist < 100e3) %>%
+
+  ggplot(aes(dist, duration)) +
+
+  geom_bin2d(bins = c(500,500)) +
+
+  scale_x_log10() +
+
+  scale_y_log10() +
+
+  labs(x = "Direct distance [m]", y = "Trip duration [s]")
+
 ```
 
 
-```
-```
-
-
-Subsampling to get a subset for analysis.
 
 ```{r}
-fwrite(train_dt %>% sample_frac(0.1), file = "../data/raw/train_sub.csv")
+train_dt = train_dt %>% mutate(speed=(dist/duration)*3.6) 
+
+```
+### Distribution of average speed
+```{r}
+  train_dt %>% filter(speed > 2 & speed < 1e2)  %>% 
+
+  ggplot(aes(speed)) +
+
+  geom_histogram(fill = "red", bins = 50) +
+
+  labs(x = "Average speed [km/h] (direct distance)")
+```
+
+## Feature Engineering
+
+### Time-related Features
+How time-related factors (hour of day, day of week, and month) affect the trip duration. They might affect trip distance and average speed. 
+
+```{r}
+for (col in c( "hour", "wday","month")) {
+
+  p1 = train_dt %>%
+  group_by_(col) %>%
+  summarise(median_duration = median(duration)) %>%
+  ggplot(aes_string(col, "median_duration")) +
+  geom_point(size = 4) +
+  labs( y = "Median Duration [s]") +
+  theme(legend.position = "none")
+
+  p2 <- train_dt %>%
+  group_by_(col) %>%
+  count() %>%
+  ggplot(aes_string(col, "n")) +
+  geom_point(size = 4) +
+  labs( y = "Total number of pickups") +
+  theme(legend.position = "none")
+  
+  p3 <- train_dt %>%
+  group_by_(col) %>%
+  summarise(median_speed = median(speed)) %>%
+  ggplot(aes_string(col, "median_speed")) +
+  geom_point(size = 4) +
+  labs( y = "Median Speed[km/h]") +
+  theme(legend.position = "none")
+  
+  p4 <- train_dt %>%
+  group_by_(col) %>%
+  summarise(median_dist = median(dist)) %>%
+  ggplot(aes_string(col, "median_dist")) +
+  geom_point(size = 4) +
+  labs( y = "Median Distance [m]") +
+  theme(legend.position = "none")
+
+  
+  layout <- matrix(c(1,2,3,4),2,2,byrow=TRUE)
+  multiplot(p1, p2, p3, p4, layout=layout)
+  
+}
+
+
+```
+
+### Geo-related Features
+
+How the geo features would affect the trip duration. How pick-up/drop-off location affect the trip duration and speed. 
+```{r}
+p1 = train_dt %>% filter(duration > 0) %>% sample_n(400) %>% ggplot(aes(y = start_lat, x = start_lng, color = duration)) + geom_point() + scale_color_gradient(trans = "log", low = "blue", high = "red") + theme(legend.position = c( 0.8, 0.3))
+
+p2 = train_dt %>% filter(speed > 0) %>% sample_n(400) %>% ggplot(aes(y = start_lat, x = start_lng, color = speed)) + geom_point() + scale_color_gradient(trans = "log", low = "blue", high = "red")+ theme(legend.position = c( 0.8, 0.3))
+
+  layout <- matrix(c(1,2),1,2,byrow=TRUE)
+  multiplot(p1, p2,layout=layout)
+
 ```
 
 
+How bearing affects the trip duration and speed.
+```{r}
+p1 <- train_dt %>%
+  filter(duration < 3600*22) %>%
+  filter(dist < 1e5) %>%
+  ggplot(aes(bearing, duration)) +
+  geom_bin2d(bins = c(100,100)) +
+  scale_y_log10() +
+  labs(x = "Bearing", y = "Trip duration") + 
+  coord_polar() + 
+  scale_x_continuous(breaks = seq(-180, 180, by = 45))
+
+p2 <- train_dt %>%
+  filter(speed < 75 & dist < 1e5) %>%
+  ggplot(aes(bearing, speed)) +
+  geom_bin2d(bins = c(100,100)) +
+  labs(x = "Bearing", y = "Speed") +
+  coord_polar() +
+  scale_x_continuous(breaks = seq(-180, 180, by = 45))
+
+
+layout <- matrix(c(1,2),1,2,byrow=TRUE)
+multiplot(p1, p2, layout=layout)
+
+```
+
+
+How distance to airport affects the trip duration and speed. 
+```{r}
+jfk_coord <- tibble(lon = -73.778889, lat = 40.639722)
+la_guardia_coord <- tibble(lon = -73.872611, lat = 40.77725)
+
+train_dt$jfk_dist_pick <- distCosine(pick_coord, jfk_coord)
+train_dt$jfk_dist_drop <- distCosine(drop_coord, jfk_coord)
+train_dt$lg_dist_pick <- distCosine(pick_coord, la_guardia_coord)
+train_dt$lg_dist_drop <- distCosine(drop_coord, la_guardia_coord)
+
+```
+
+```{r}
+
+for (col in c( "jfk_dist_pick", "jfk_dist_drop","lg_dist_pick", "lg_dist_drop"))
+{
+
+  p1 = train_dt %>%
+  sample_n(500) %>%
+  ggplot(aes_string(col, "duration")) +
+  geom_point() +
+  labs( y = "Trip duration [s]") +
+  theme(legend.position = "none")  
+  
+  p2 = train_dt %>%
+  sample_n(500) %>%
+  ggplot(aes_string(col, "speed")) +
+  geom_point() +
+  labs( y = "Speed [km/h]") +
+  theme(legend.position = "none")
+  
+  layout <- matrix(c(1,2),1,2,byrow=TRUE)
+  multiplot(p1, p2, layout=layout)
+
+}
+```
+## Outlier
+
+I have exclude data points whose trip duration 10 seconds or longer than a day. 
 
 
 
