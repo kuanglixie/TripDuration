@@ -7,14 +7,28 @@ from sklearn.externals import joblib
 from sklearn.utils import shuffle
 import lightgbm as lgb
 
-
-def bearing_array(lat1, lng1, lat2, lng2):
-    lng_delta_rad = np.radians(lng2 - lng1)
-    lat1, lng1, lat2, lng2 = map(np.radians, (lat1, lng1, lat2, lng2))
-    y = np.sin(lng_delta_rad) * np.cos(lat2)
-    x = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * \
-        np.cos(lat2) * np.cos(lng_delta_rad)
-    return np.degrees(np.arctan2(y, x))
+FEAT_ENG = True  # Whether do feature engineering or load from existing dataset
+EVAL = True  # True for evaluation, False for predicting on test set
+LGB_PARAM = {'objective': 'fair',
+             'metric': 'rmse',
+             'boosting': 'gbdt',
+             'fair_c': 1.5,
+             'learning_rate': 0.2,
+             'verbose': 0,
+             'num_leaves': 60,
+             'bagging_fraction': 0.95,
+             'bagging_freq': 1,
+             'bagging_seed': seed + n,
+             'feature_fraction': 0.6,
+             'feature_fraction_seed': seed + n,
+             'min_data_in_leaf': 10,
+             'max_bin': 255,
+             'max_depth': 10,
+             'reg_lambda': 20,
+             'reg_alpha': 20,
+             'lambda_l2': 20,
+             'num_threads': 30
+             }
 
 
 def haversine_array(lat1, lng1, lat2, lng2):
@@ -52,37 +66,15 @@ def rmsle(predicted, real):
 def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
     baggedpred = np.array([0.0 for d in range(0, xt.shape[0])])
     for n in range(0, estimators):
-        params = {'objective': 'fair',
-                  'metric': 'rmse',
-                  'boosting': 'gbdt',
-                  'fair_c': 1.5,
-                  'learning_rate': 0.2,
-                  'verbose': 0,
-                  'num_leaves': 60,
-                  'bagging_fraction': 0.95,
-                  'bagging_freq': 1,
-                  'bagging_seed': seed + n,
-                  'feature_fraction': 0.6,
-                  'feature_fraction_seed': seed + n,
-                  'min_data_in_leaf': 10,
-                  'max_bin': 255,
-                  'max_depth': 10,
-                  'reg_lambda': 20,
-                  'reg_alpha': 20,
-                  'lambda_l2': 20,
-                  'num_threads': 30
-                  }
-
         d_train = lgb.Dataset(X_ts, np.log1p(y_cs), free_raw_data=False)
         if type(yt) != type(None):
             d_cv = lgb.Dataset(xt, np.log1p(
                 yt), free_raw_data=False, reference=d_train)
-            model = lgb.train(params, d_train, num_boost_round=4000,
-                              valid_sets=d_cv,
-                              verbose_eval=True)
+            model = lgb.train(LGB_PARAM, d_train, num_boost_round=4000,
+                              valid_sets=d_cv, verbose_eval=True)
+            return model
         else:
-            d_cv = lgb.Dataset(xt, free_raw_data=False)
-            model = lgb.train(params, d_train, num_boost_round=4000)
+            model = lgb.train(LGB_PARAM, d_train, num_boost_round=4000)
         preds = np.expm1(model.predict(xt))
         baggedpred += preds
         print("completed: " + str(n))
@@ -90,13 +82,14 @@ def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
     return baggedpred
 
 
-export = True
-if export:
-    t0 = dt.datetime.now()
-    train = pd.read_csv('input/train.csv')
-    test = pd.read_csv('input/test.csv')
-    sample_submission = pd.read_csv('input/sample_submission.csv')
-    test_1 = test.copy()
+if FEAT_ENG:
+    if EVAL:
+        train = pd.read_csv('../../data/train.csv')
+        test = pd.read_csv('../../data/test.csv')
+    else:
+        train = pd.read_csv('../../data/train_eval.csv')
+        test = pd.read_csv('../../data/test_eval.csv')
+        y_test = np.array(test['duration'].values)
 
     train['pickup_datetime'] = pd.to_datetime(train.pickup_datetime)
     test['pickup_datetime'] = pd.to_datetime(test.pickup_datetime)
@@ -104,10 +97,6 @@ if export:
     test.loc[:, 'pickup_date'] = test['pickup_datetime'].dt.date
     train['dropoff_datetime'] = pd.to_datetime(train.dropoff_datetime)
 
-    train.loc[:, 'pickup_weekday'] = train['pickup_datetime'].dt.weekday
-    train.loc[:, 'pickup_hour_weekofyear'] = train['pickup_datetime'].dt.weekofyear
-    train.loc[:, 'pickup_hour'] = train['pickup_datetime'].dt.hour
-    train.loc[:, 'pickup_minute'] = train['pickup_datetime'].dt.minute
     train.loc[:, 'pickup_dt'] = (
         train['pickup_datetime'] - train['pickup_datetime'].min()).dt.total_seconds()
     train.loc[:, 'pickup_week_hour'] = train['pickup_weekday'] * \
@@ -193,17 +182,6 @@ if export:
         test[['dropoff_latitude', 'dropoff_longitude']])
     t1 = dt.datetime.now()
 
-    fr1 = pd.read_csv('input/fastest_routes_train_part_1.csv',
-                      usecols=['id', 'total_distance', 'total_travel_time',  'number_of_steps', ])
-    fr2 = pd.read_csv('input/fastest_routes_train_part_2.csv',
-                      usecols=['id', 'total_distance', 'total_travel_time', 'number_of_steps'])
-    test_street_info = pd.read_csv('input/fastest_routes_test.csv',
-                                   usecols=['id', 'total_distance', 'total_travel_time', 'number_of_steps'])
-
-    train_street_info = pd.concat((fr1, fr2))
-    train = train.merge(train_street_info, how='left', on='id')
-    test = test.merge(test_street_info, how='left', on='id')
-
     train['log_trip_duration'] = np.log(train['trip_duration'].values + 1)
 
     feature_names = list(train.columns)
@@ -214,43 +192,48 @@ if export:
     feature_names = [
         f for f in train.columns if f not in do_not_use_for_training]
     print('We have %i features.' % len(feature_names))
-    train[feature_names].count()
+    print(train[feature_names].count())
 
-    train['store_and_fwd_flag'] = train['store_and_fwd_flag'].map(
-        lambda x: 0 if x == 'N' else 1)
-
-    test['store_and_fwd_flag'] = test['store_and_fwd_flag'].map(
-        lambda x: 0 if x == 'N' else 1)
-
-    y = np.array(train['trip_duration'].values)
+    y = np.array(train['duration'].values)
     X = train[feature_names].values
     test_id = np.array(test['id'].values)
     X_test = test[feature_names].values
 
-    joblib.dump((X, X_test, y, test_id), "pikcles.pkl")
+    if EVAL:
+        joblib.dump((X, X_test, y_test, y, test_id), "pikcles_eval.pkl")
+    else:
+        joblib.dump((X, X_test, y, test_id), "pikcles_train.pkl")
 else:
-    X, X_test, y, test_id = joblib.load("pikcles.pkl")
+    if EVAL:
+        X, X_test, y, y_test, test_id = joblib.load("pikcles.pkl")
+    else:
+        X, X_test, y, test_id = joblib.load("pikcles.pkl")
 
 print(" final shape of train ",  X.shape)
 print(" final shape of X_test ",  X_test.shape)
 print(" final shape of y ",  y.shape)
 
-seed = 1
-path = ''
-outset = "sample"
-estimators = 30
 
+if EVAL:
+    seed = 1
+    estimators = 1
+    model = bagged_set_cv(X, y, seed, estimators, xt=X_test, yt=y_test)
+else:
+    seed = 1
+    path = ''
+    outset = "1"
+    estimators = 30
 
-preds = bagged_set_cv(X, y, seed, estimators, X_test, yt=None)
-preds = np.array(preds)
+    preds = bagged_set_cv(X, y, seed, estimators, X_test, yt=None)
+    preds = np.array(preds)
 
-print("Write results...")
-output_file = "submission_" + outset + ".csv"
-print("Writing submission to %s" % output_file)
-f = open(output_file, "w")
-f.write("id,trip_duration\n")
-for g in range(0, len(preds)):
-    pr = preds[g]
-    f.write("%s,%f\n" % (((test_id[g]), pr)))
-f.close()
-print("Done.")
+    print("Write results...")
+    output_file = "prediction_" + outset + ".csv"
+    print("Writing submission to %s" % output_file)
+    f = open(output_file, "w")
+    f.write("id,trip_duration\n")
+    for g in range(0, len(preds)):
+        pr = preds[g]
+        f.write("%s,%f\n" % (((test_id[g]), pr)))
+    f.close()
+    print("Done.")
