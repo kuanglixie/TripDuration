@@ -18,9 +18,7 @@ LGB_PARAM = {'objective': 'fair',
              'num_leaves': 60,
              'bagging_fraction': 0.95,
              'bagging_freq': 1,
-             'bagging_seed': seed + n,
              'feature_fraction': 0.6,
-             'feature_fraction_seed': seed + n,
              'min_data_in_leaf': 10,
              'max_bin': 255,
              'max_depth': 10,
@@ -67,14 +65,17 @@ def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
     baggedpred = np.array([0.0 for d in range(0, xt.shape[0])])
     for n in range(0, estimators):
         d_train = lgb.Dataset(X_ts, np.log1p(y_cs), free_raw_data=False)
+        params = dict(LGB_PARAM)
+        params['bagging_seed'] = seed + n
+        params['feature_fraction_seed'] = seed + n
         if type(yt) != type(None):
             d_cv = lgb.Dataset(xt, np.log1p(
                 yt), free_raw_data=False, reference=d_train)
-            model = lgb.train(LGB_PARAM, d_train, num_boost_round=4000,
+            model = lgb.train(params, d_train, num_boost_round=4000,
                               valid_sets=d_cv, verbose_eval=True)
             return model
         else:
-            model = lgb.train(LGB_PARAM, d_train, num_boost_round=4000)
+            model = lgb.train(params, d_train, num_boost_round=4000)
         preds = np.expm1(model.predict(xt))
         baggedpred += preds
         print("completed: " + str(n))
@@ -84,41 +85,13 @@ def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
 
 if FEAT_ENG:
     if EVAL:
-        train = pd.read_csv('../../data/train.csv')
-        test = pd.read_csv('../../data/test.csv')
+        #train = pd.read_csv('../../data/processed/train.csv')
+        train = pd.read_csv('../../data/processed/train_eval.csv')
+        test = pd.read_csv('../../data/processed/test.csv')
     else:
-        train = pd.read_csv('../../data/train_eval.csv')
-        test = pd.read_csv('../../data/test_eval.csv')
+        train = pd.read_csv('../../data/processed/train_eval.csv')
+        test = pd.read_csv('../../data/processed/test_eval.csv')
         y_test = np.array(test['duration'].values)
-
-    train['pickup_datetime'] = pd.to_datetime(train.pickup_datetime)
-    test['pickup_datetime'] = pd.to_datetime(test.pickup_datetime)
-    train.loc[:, 'pickup_date'] = train['pickup_datetime'].dt.date
-    test.loc[:, 'pickup_date'] = test['pickup_datetime'].dt.date
-    train['dropoff_datetime'] = pd.to_datetime(train.dropoff_datetime)
-
-    train.loc[:, 'pickup_dt'] = (
-        train['pickup_datetime'] - train['pickup_datetime'].min()).dt.total_seconds()
-    train.loc[:, 'pickup_week_hour'] = train['pickup_weekday'] * \
-        24 + train['pickup_hour']
-
-    test.loc[:, 'pickup_weekday'] = test['pickup_datetime'].dt.weekday
-    test.loc[:, 'pickup_hour_weekofyear'] = test['pickup_datetime'].dt.weekofyear
-    test.loc[:, 'pickup_hour'] = test['pickup_datetime'].dt.hour
-    test.loc[:, 'pickup_minute'] = test['pickup_datetime'].dt.minute
-    test.loc[:, 'pickup_dt'] = (
-        test['pickup_datetime'] - train['pickup_datetime'].min()).dt.total_seconds()
-    test.loc[:, 'pickup_week_hour'] = test['pickup_weekday'] * \
-        24 + test['pickup_hour']
-
-    train.loc[:, 'pickup_dayofyear'] = train['pickup_datetime'].dt.dayofyear
-    test.loc[:, 'pickup_dayofyear'] = test['pickup_datetime'].dt.dayofyear
-
-    train.loc[:, 'direction'] = bearing_array(train['pickup_latitude'].values, train['pickup_longitude'].values,
-                                              train['dropoff_latitude'].values, train['dropoff_longitude'].values)
-
-    test.loc[:, 'direction'] = bearing_array(test['pickup_latitude'].values, test['pickup_longitude'].values,
-                                             test['dropoff_latitude'].values, test['dropoff_longitude'].values)
 
     train.loc[:, 'distance_haversine'] = haversine_array(
         train['pickup_latitude'].values, train['pickup_longitude'].values, train['dropoff_latitude'].values, train['dropoff_longitude'].values)
@@ -129,15 +102,6 @@ if FEAT_ENG:
         test['pickup_latitude'].values, test['pickup_longitude'].values, test['dropoff_latitude'].values, test['dropoff_longitude'].values)
     test.loc[:, 'distance_dummy_manhattan'] = dummy_manhattan_distance(
         test['pickup_latitude'].values, test['pickup_longitude'].values, test['dropoff_latitude'].values, test['dropoff_longitude'].values)
-
-    train.loc[:, 'center_latitude'] = (
-        train['pickup_latitude'].values + train['dropoff_latitude'].values) / 2
-    train.loc[:, 'center_longitude'] = (
-        train['pickup_longitude'].values + train['dropoff_longitude'].values) / 2
-    test.loc[:, 'center_latitude'] = (
-        test['pickup_latitude'].values + test['dropoff_latitude'].values) / 2
-    test.loc[:, 'center_longitude'] = (
-        test['pickup_longitude'].values + test['dropoff_longitude'].values) / 2
 
     coords = np.vstack((train[['pickup_latitude', 'pickup_longitude']].values,
                         train[['dropoff_latitude', 'dropoff_longitude']].values,
@@ -182,12 +146,12 @@ if FEAT_ENG:
         test[['dropoff_latitude', 'dropoff_longitude']])
     t1 = dt.datetime.now()
 
-    train['log_trip_duration'] = np.log(train['trip_duration'].values + 1)
+    train['log_trip_duration'] = np.log(train['duration'].values + 1)
 
     feature_names = list(train.columns)
     print(np.setdiff1d(train.columns, test.columns))
 
-    do_not_use_for_training = ['id', 'log_trip_duration', 'trip_duration', 'dropoff_datetime', 'pickup_date',
+    do_not_use_for_training = ['row_id', 'log_trip_duration', 'duration',
                                'pickup_datetime', 'date']
     feature_names = [
         f for f in train.columns if f not in do_not_use_for_training]
