@@ -3,23 +3,35 @@ New York Taxi Trip Duration
 
 predict New York taxi trip duration
 
+Please check `notebooks` and `src` folder for EDA and model building source code.
+
 Summary of Strategy
 ------------
 what you considered and why, potential improve-
 ments, ideas for a real-time implementation, or anything else that you think is relevant to understanding your solution. 
 
-Please check `notebooks` and `src` folder for EDA and model building source code.
 
-Please briefly discuss the error metric(s) you believe should be used when travel times are
-used to make dispatch and fare decisions.
+Distance: direct distance distConsin, manhatton distance, fastest route distance
+Speed: local traffic: location + time, cluster of location and time, traffic heatmap
 
 
 Error metics
 ------------
 
+Please briefly discuss the error metric(s) you believe should be used when travel times are
+used to make dispatch and fare decisions.
 
-Real-time implementation
+RMSLE
+
+
+Ideas of Real-time implementation
 ------------
+
+
+Further improvement
+------------
+
+OSRM
 
 
 
