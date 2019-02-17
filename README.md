@@ -26,6 +26,7 @@ RMSLE
 
 Ideas of Real-time implementation
 ------------
+The lightGBM model can be train weekly. We can have two levels of predictions. First level is faster, less accurate, and user see this number first. For this level, we can use lightGBM/XGBoost to create smaller set of features (i.e. function like `xgb.create.features`), and then train another linear model on top of those features. The smaller set of features take much less of space and the linear model can be very efficient in the production. For the second level, we can predict on our full models and push to user a few seconds after.
 
 
 Further improvement

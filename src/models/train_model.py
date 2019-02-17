@@ -7,20 +7,20 @@ from sklearn.externals import joblib
 from sklearn.utils import shuffle
 import lightgbm as lgb
 
+# Evaluation RMSLE is around: 0.384333
+
 FEAT_ENG = True  # Whether do feature engineering or load from existing dataset
-EVAL = True  # True for evaluation, False for predicting on test set
+EVAL = False  # True for evaluation, False for predicting on test set
 LGB_PARAM = {'objective': 'fair',
              'metric': 'rmse',
              'boosting': 'gbdt',
              'fair_c': 1.5,
-             'learning_rate': 0.2,
+             'learning_rate': 0.2,  # 0.2,
              'verbose': 0,
              'num_leaves': 60,
              'bagging_fraction': 0.95,
              'bagging_freq': 1,
-             'bagging_seed': seed + n,
              'feature_fraction': 0.6,
-             'feature_fraction_seed': seed + n,
              'min_data_in_leaf': 10,
              'max_bin': 255,
              'max_depth': 10,
@@ -48,34 +48,41 @@ def dummy_manhattan_distance(lat1, lng1, lat2, lng2):
     return a + b
 
 
-def rmsle(predicted, real):
-    sum = 0.0
-    for x in range(len(predicted)):
-        p = predicted[x]
-        r = real[x]
-        if p < 0:
-            p = 0
-        if r < 0:
-            r = 0
-        p = np.log(p + 1)
-        r = np.log(r + 1)
-        sum = sum + (p - r)**2
-    return (sum / len(predicted))**0.5
+# def rmsle(predicted, real):
+#     sum = 0.0
+#     for x in range(len(predicted)):
+#         p = predicted[x]
+#         r = real[x]
+#         if p < 0:
+#             p = 0
+#         if r < 0:
+#             r = 0
+#         p = np.log(p + 1)
+#         r = np.log(r + 1)
+#         sum = sum + (p - r)**2
+#     return (sum / len(predicted))**0.5
 
 
 def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
     baggedpred = np.array([0.0 for d in range(0, xt.shape[0])])
+    params = dict(LGB_PARAM)
     for n in range(0, estimators):
-        d_train = lgb.Dataset(X_ts, np.log1p(y_cs), free_raw_data=False)
+        #d_train = lgb.Dataset(X_ts, np.log1p(y_cs), free_raw_data=False)
+        d_train = lgb.Dataset(X_ts, y_cs, free_raw_data=False)
+        params['bagging_seed'] = seed + n
+        params['feature_fraction_seed'] = seed + n
         if type(yt) != type(None):
-            d_cv = lgb.Dataset(xt, np.log1p(
-                yt), free_raw_data=False, reference=d_train)
-            model = lgb.train(LGB_PARAM, d_train, num_boost_round=4000,
-                              valid_sets=d_cv, verbose_eval=True)
+            # d_cv = lgb.Dataset(xt, np.log1p(yt),
+            #                   free_raw_data=False, reference=d_train)
+            d_cv = lgb.Dataset(xt, yt,
+                               free_raw_data=False, reference=d_train)
+            model = lgb.train(params, d_train, num_boost_round=6000,
+                              valid_sets=d_cv, verbose_eval=True,
+                              early_stopping_rounds=10)
             return model
         else:
-            model = lgb.train(LGB_PARAM, d_train, num_boost_round=4000)
-        preds = np.expm1(model.predict(xt))
+            model = lgb.train(params, d_train, num_boost_round=4000)
+        preds = model.predict(xt)
         baggedpred += preds
         print("completed: " + str(n))
     baggedpred /= estimators
@@ -84,41 +91,13 @@ def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
 
 if FEAT_ENG:
     if EVAL:
-        train = pd.read_csv('../../data/train.csv')
-        test = pd.read_csv('../../data/test.csv')
-    else:
-        train = pd.read_csv('../../data/train_eval.csv')
-        test = pd.read_csv('../../data/test_eval.csv')
+        train = pd.read_csv('../../data/processed/train_eval.csv')
+        test = pd.read_csv('../../data/processed/test_eval.csv')
         y_test = np.array(test['duration'].values)
-
-    train['pickup_datetime'] = pd.to_datetime(train.pickup_datetime)
-    test['pickup_datetime'] = pd.to_datetime(test.pickup_datetime)
-    train.loc[:, 'pickup_date'] = train['pickup_datetime'].dt.date
-    test.loc[:, 'pickup_date'] = test['pickup_datetime'].dt.date
-    train['dropoff_datetime'] = pd.to_datetime(train.dropoff_datetime)
-
-    train.loc[:, 'pickup_dt'] = (
-        train['pickup_datetime'] - train['pickup_datetime'].min()).dt.total_seconds()
-    train.loc[:, 'pickup_week_hour'] = train['pickup_weekday'] * \
-        24 + train['pickup_hour']
-
-    test.loc[:, 'pickup_weekday'] = test['pickup_datetime'].dt.weekday
-    test.loc[:, 'pickup_hour_weekofyear'] = test['pickup_datetime'].dt.weekofyear
-    test.loc[:, 'pickup_hour'] = test['pickup_datetime'].dt.hour
-    test.loc[:, 'pickup_minute'] = test['pickup_datetime'].dt.minute
-    test.loc[:, 'pickup_dt'] = (
-        test['pickup_datetime'] - train['pickup_datetime'].min()).dt.total_seconds()
-    test.loc[:, 'pickup_week_hour'] = test['pickup_weekday'] * \
-        24 + test['pickup_hour']
-
-    train.loc[:, 'pickup_dayofyear'] = train['pickup_datetime'].dt.dayofyear
-    test.loc[:, 'pickup_dayofyear'] = test['pickup_datetime'].dt.dayofyear
-
-    train.loc[:, 'direction'] = bearing_array(train['pickup_latitude'].values, train['pickup_longitude'].values,
-                                              train['dropoff_latitude'].values, train['dropoff_longitude'].values)
-
-    test.loc[:, 'direction'] = bearing_array(test['pickup_latitude'].values, test['pickup_longitude'].values,
-                                             test['dropoff_latitude'].values, test['dropoff_longitude'].values)
+    else:
+        #train = pd.read_csv('../../data/processed/train.csv')
+        train = pd.read_csv('../../data/processed/train.csv')
+        test = pd.read_csv('../../data/processed/test.csv')
 
     train.loc[:, 'distance_haversine'] = haversine_array(
         train['pickup_latitude'].values, train['pickup_longitude'].values, train['dropoff_latitude'].values, train['dropoff_longitude'].values)
@@ -129,15 +108,6 @@ if FEAT_ENG:
         test['pickup_latitude'].values, test['pickup_longitude'].values, test['dropoff_latitude'].values, test['dropoff_longitude'].values)
     test.loc[:, 'distance_dummy_manhattan'] = dummy_manhattan_distance(
         test['pickup_latitude'].values, test['pickup_longitude'].values, test['dropoff_latitude'].values, test['dropoff_longitude'].values)
-
-    train.loc[:, 'center_latitude'] = (
-        train['pickup_latitude'].values + train['dropoff_latitude'].values) / 2
-    train.loc[:, 'center_longitude'] = (
-        train['pickup_longitude'].values + train['dropoff_longitude'].values) / 2
-    test.loc[:, 'center_latitude'] = (
-        test['pickup_latitude'].values + test['dropoff_latitude'].values) / 2
-    test.loc[:, 'center_longitude'] = (
-        test['pickup_longitude'].values + test['dropoff_longitude'].values) / 2
 
     coords = np.vstack((train[['pickup_latitude', 'pickup_longitude']].values,
                         train[['dropoff_latitude', 'dropoff_longitude']].values,
@@ -182,21 +152,20 @@ if FEAT_ENG:
         test[['dropoff_latitude', 'dropoff_longitude']])
     t1 = dt.datetime.now()
 
-    train['log_trip_duration'] = np.log(train['trip_duration'].values + 1)
-
     feature_names = list(train.columns)
+    print("Columns only in train")
     print(np.setdiff1d(train.columns, test.columns))
 
-    do_not_use_for_training = ['id', 'log_trip_duration', 'trip_duration', 'dropoff_datetime', 'pickup_date',
+    do_not_use_for_training = ['row_id', 'duration',
                                'pickup_datetime', 'date']
     feature_names = [
         f for f in train.columns if f not in do_not_use_for_training]
     print('We have %i features.' % len(feature_names))
-    print(train[feature_names].count())
+    print(",".join(feature_names))
 
     y = np.array(train['duration'].values)
     X = train[feature_names].values
-    test_id = np.array(test['id'].values)
+    test_id = np.array(test['row_id'].values)
     X_test = test[feature_names].values
 
     if EVAL:
@@ -205,13 +174,15 @@ if FEAT_ENG:
         joblib.dump((X, X_test, y, test_id), "pikcles_train.pkl")
 else:
     if EVAL:
-        X, X_test, y, y_test, test_id = joblib.load("pikcles.pkl")
+        X, X_test, y_test, y, test_id = joblib.load("pikcles_eval.pkl")
     else:
-        X, X_test, y, test_id = joblib.load("pikcles.pkl")
+        X, X_test, y, test_id = joblib.load("pikcles_train.pkl")
 
 print(" final shape of train ",  X.shape)
+# print(" final of train ",  X[1:10, :])
 print(" final shape of X_test ",  X_test.shape)
 print(" final shape of y ",  y.shape)
+# print(" final shape of y ",  y[1:10])
 
 
 if EVAL:
@@ -222,7 +193,7 @@ else:
     seed = 1
     path = ''
     outset = "1"
-    estimators = 30
+    estimators = 15  # 30
 
     preds = bagged_set_cv(X, y, seed, estimators, X_test, yt=None)
     preds = np.array(preds)
@@ -231,7 +202,7 @@ else:
     output_file = "prediction_" + outset + ".csv"
     print("Writing submission to %s" % output_file)
     f = open(output_file, "w")
-    f.write("id,trip_duration\n")
+    f.write("row_id,trip_duration\n")
     for g in range(0, len(preds)):
         pr = preds[g]
         f.write("%s,%f\n" % (((test_id[g]), pr)))

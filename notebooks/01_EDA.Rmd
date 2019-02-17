@@ -102,11 +102,11 @@ sum(is.na(test_dt))
 ## Combining train and test
 
 ```{r}
-cb_dt <- bind_rows(train_dt %>% mutate(dset = "train"), 
+cb_dt = bind_rows(train_dt %>% mutate(dset = "train"), 
                    test_dt %>% mutate(dset = "test",
                                      duration = NA))
-cb_dt <- cb_dt %>% mutate(dset = factor(dset))
 
+cb_dt = cb_dt %>% mutate(dset = factor(dset))
 ```
 
 ### Time range for train and test
@@ -383,5 +383,114 @@ for (col in c( "jfk_dist_pick", "jfk_dist_drop","lg_dist_pick", "lg_dist_drop"))
 I have exclude data points whose trip duration 10 seconds or longer than a day. 
 
 
+# Final Feature Engineering
+
+```{r}
+train_dt = fread("../data/raw/train.csv")
+test_dt = fread("../data/raw/test.csv")
+
+# airport location
+jfk_coord = tibble(lon = -73.778889, lat = 40.639722)
+la_guardia_coord = tibble(lon = -73.872611, lat = 40.77725)
+
+
+cb_dt = bind_rows(train_dt %>% mutate(dset = "train"), 
+                   test_dt %>% mutate(dset = "test",
+                                     duration = NA))
+cb_dt = cb_dt %>% mutate(dset = factor(dset))
+```
+## Distance related
+
+```{r}
+pick_coord <- cb_dt %>%
+  select(start_lng, start_lat)
+drop_coord <- cb_dt %>%
+  select(end_lng, end_lat)
+
+cb_dt$dist = distCosine(pick_coord, drop_coord)
+cb_dt$bearing = bearing(pick_coord, drop_coord)
+
+cb_dt$jfk_pick <- distCosine(pick_coord, jfk_coord)
+cb_dt$jfk_drop <- distCosine(drop_coord, jfk_coord)
+cb_dt$lg_pick <- distCosine(pick_coord, la_guardia_coord)
+cb_dt$lg_drop <- distCosine(drop_coord, la_guardia_coord)
+
+cb_dt <- cb_dt %>%
+  mutate(speed = dist/duration*3.6,
+         jfk_trip = as.integer((jfk_pick < 2e3) | (jfk_drop < 2e3)),
+         lg_trip = as.integer((lg_pick < 2e3) | (lg_drop < 2e3)),
+         center_latitude = (start_lat + end_lat)/2,
+         center_longitude = (start_lng + end_lng)/2
+         ) %>%
+  rename(pickup_longitude = start_lng, pickup_latitude = start_lat, 
+         dropoff_longitude = end_lng, dropoff_latitude = end_lat)
+```
+## Time related
+
+```{r}
+cb_dt = cb_dt %>%
+  mutate(pickup_datetime = with_tz(
+    as_datetime(
+      as.POSIXct(start_timestamp, origin="1970-01-01")
+      ))
+  ) %>% 
+  mutate(date = date(pickup_datetime),
+         month = month(pickup_datetime),
+         wday = wday(pickup_datetime, label = TRUE),
+         wday = as.integer(fct_relevel(wday, c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))),
+         hour = hour(pickup_datetime),
+         minute = minute(pickup_datetime),
+         whour = wday*24 + hour,
+         yday = yday(pickup_datetime),
+         work = as.numeric((hour %in% seq(8,18)) & (wday %in% c("Mon","Tue","Wed","Thu","Fri"))))
+```
+
+## Removing outliers
+
+Removing trips that taking more than one day or less than 10 seconds.
+
+```{r}
+cb_dt = cb_dt %>% 
+  filter((dset == "test") | (duration < 24*3600 & duration > 10))
+```
+
+```{r}
+# make sure we still have the same test set.
+table(cb_dt$dset)
+c(nrow(train_dt), nrow(test_dt))
+```
+
+## Save to files
+
+```{r}
+# for evaluation
+set.seed(SEED)
+
+train_dt = cb_dt %>% filter(dset == "train") %>% sample_n(100000) # will delete sample_n after testing the python code
+smp_size = floor(0.75 * nrow(train_dt))
+train_ind = sample(seq_len(nrow(train_dt)), size = smp_size)
+
+exclude_col = c("dset")
+
+fwrite(train_dt[train_ind, ] %>% select(-one_of(exclude_col)), file = "../data/processed/train_eval.csv")
+fwrite(train_dt[-train_ind, ] %>% select(-one_of(exclude_col)), file = "../data/processed/test_eval.csv")
+```
+
+
+```{r}
+fwrite(cb_dt %>% filter(dset == "train") %>% select(-one_of(exclude_col)), file = "../data/processed/train.csv")
+fwrite(cb_dt %>% filter(dset == "test") %>% select(-one_of(c(exclude_col, "duration"))), file = "../data/processed/test.csv")
+```
+
+```{r}
+cb_dt %>% filter(dset == "train") %>% summarise(mean(duration)/60)
+cb_dt %>% filter(dset == "train") %>% summarise(median(duration)/60)
+
+```
+
+
+```{r}
+cb_dt %>% filter(dset == "train") %>% mutate(mse = (duration - mean(duration))**2) %>% summarise(sum(mse)^0.5)
+```
 
 
