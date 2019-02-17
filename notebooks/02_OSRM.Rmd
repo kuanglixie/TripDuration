@@ -39,17 +39,20 @@ cb_dt$fast_distance = 0
 #for (i in 1:nrow(cb_dt)) {
 profvis(
   for (i in 1:1000) {
-    cval[[i]] = osrmRoute(src = cb_dt[i, c("row_id", "start_lng","start_lat")], cb_dt[i, c("row_id", "end_lng","end_lat")], overview = FALSE)
+    cval = osrmRoute(src = cb_dt[i, c("row_id", "start_lng","start_lat")], cb_dt[i, c("row_id", "end_lng","end_lat")], overview = FALSE)
     cb_dt[i, "fast_duration"] = cval[["duration"]]
     cb_dt[i, "fast_distance"] = cval[["distance"]]
   }
 )
+```
 
+```{r}
 cb_dt[1:1000,] %>% ggplot(aes(x = duration, y = fast_duration * 60)) + geom_point() + geom_abline(slope = 1, intercept = 0)
 ```
 
-The `duration` and `distance` features got from OSRM is indeed very promising and can serve as great features for trip duration prediction. However, for 1000 samples, the program will take ~3 mins to run. The total running time will be beyong 24 hours.
 
-After profiling the code, I found that the main bottleneck here is the http request to OSRM service. If I have more time, I would write distributed code to send request using multiple threads and deploy to several small size AWS (Amazon Web Service) instances. I would guess OSRM service will have some limitation for each IP address, so I will also need to tune the number of thread per IP.
+The `duration` and `distance` features got from OSRM is very promising and can serve as great features for trip duration prediction. However, for 1000 samples, the program will take ~3 mins to run on my laptop and my home Internet. The total running time for all samples will be more than 24 hours.
 
-Data from OSRM provide a much more accurate distance and duration estimation between start and end location, if no other traffic condition. 
+After profiling the code, I found that the main bottleneck here is the http request to OSRM service (the `RCurl` call). If I have more time, I would write a distributed code to send request using multiple threads and deploy to several small size AWS (Amazon Web Service) instances. I would guess OSRM service will have some limitation for each IP address, so I will also need to tune the number of request/s per IP.
+
+Data from OSRM provide a much more accurate distance and duration estimation between start and end location, if no other traffic condition. However, for a real-time service, we need to have our own service for fast route calculation.
