@@ -7,18 +7,18 @@ from sklearn.externals import joblib
 from sklearn.utils import shuffle
 import lightgbm as lgb
 
-# Evaluation RMSLE is around: 0.384333
+# Evaluation RMSLE is around: 0.384333, RMSE is around 322.5
 
-FEAT_ENG = True  # Whether do feature engineering or load from existing dataset
+FEAT_ENG = False  # Whether do feature engineering or load from existing dataset
 EVAL = False  # True for evaluation, False for predicting on test set
 LGB_PARAM = {'objective': 'fair',
              'metric': 'rmse',
              'boosting': 'gbdt',
              'fair_c': 1.5,
-             'learning_rate': 0.2,  # 0.2,
+             'learning_rate': 0.7,  # 0.2,
              'verbose': 0,
              'num_leaves': 60,
-             'bagging_fraction': 0.95,
+             'bagging_fraction': 0.7,
              'bagging_freq': 1,
              'feature_fraction': 0.6,
              'min_data_in_leaf': 10,
@@ -81,7 +81,7 @@ def bagged_set_cv(X_ts, y_cs, seed, estimators, xt, yt=None):
                               early_stopping_rounds=10)
             return model
         else:
-            model = lgb.train(params, d_train, num_boost_round=4000)
+            model = lgb.train(params, d_train, num_boost_round=500)
         preds = model.predict(xt)
         baggedpred += preds
         print("completed: " + str(n))
@@ -193,7 +193,7 @@ else:
     seed = 1
     path = ''
     outset = "1"
-    estimators = 15  # 30
+    estimators = 3  # 30
 
     preds = bagged_set_cv(X, y, seed, estimators, X_test, yt=None)
     preds = np.array(preds)

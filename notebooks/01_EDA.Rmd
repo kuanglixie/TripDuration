@@ -74,7 +74,7 @@ SEED=20190216
 
 ```{r}
 train_dt = fread("~/GitHub/TripDuration/data/raw/train_sub.csv")
-test_dt = fread("~/GitHub/TripDuration/data/raw/train_sub.csv")
+test_dt = fread("~/GitHub/TripDuration/data/raw/test.csv")
 ```
 
 ```{r}
@@ -102,7 +102,7 @@ sum(is.na(test_dt))
 ## Combining train and test
 
 ```{r}
-cb_dt = bind_rows(train_dt %>% mutate(dset = "train"), 
+cb_dt = bind_rows(train_dt %>% mutate(dset = "train"),
                    test_dt %>% mutate(dset = "test",
                                      duration = NA))
 
@@ -127,21 +127,21 @@ tmp = cb_dt %>% group_by(dset) %>% sample_n(5000)
 tmp %>%
   filter(start_lng > -75 & start_lng < -73) %>%
   filter(start_lat > 40 & start_lat < 42) %>%
-  ggplot(aes(x = start_lng, y = start_lat, color = dset)) + 
-  geom_point(alpha = 0.1, size = 0.2) + 
+  ggplot(aes(x = start_lng, y = start_lat, color = dset)) +
+  geom_point(alpha = 0.1, size = 0.2) +
   coord_cartesian(xlim = c(-74.02,-73.77), ylim = c(40.63,40.84)) +
   facet_wrap(~dset)
 
-tmp %>% 
+tmp %>%
   filter(dset == "train") %>%
-  leaflet %>% 
+  leaflet %>%
   addProviderTiles("Esri.NatGeoWorldMap") %>%
   addCircleMarkers(~ start_lng, ~start_lat, radius = 1,
                    color = "blue", fillOpacity = 0.3)
 
-tmp %>% 
+tmp %>%
   filter(dset == "test") %>%
-  leaflet %>% 
+  leaflet %>%
   addProviderTiles("Esri.NatGeoWorldMap") %>%
   addCircleMarkers(~ start_lng, ~start_lat, radius = 1,
                    color = "red", fillOpacity = 0.3)
@@ -161,7 +161,7 @@ train_dt = train_dt %>%
     as_datetime(
       as.POSIXct(start_timestamp, origin="1970-01-01")
       ))
-  ) %>% 
+  ) %>%
   mutate(hour = hour(pickup_datetime),
          month = as.integer(month(pickup_datetime)),
          wday0 =  wday(pickup_datetime, label = TRUE),
@@ -238,12 +238,12 @@ train_dt %>%
 
 
 ```{r}
-train_dt = train_dt %>% mutate(speed=(dist/duration)*3.6) 
+train_dt = train_dt %>% mutate(speed=(dist/duration)*3.6)
 
 ```
 ### Distribution of average speed
 ```{r}
-  train_dt %>% filter(speed > 2 & speed < 1e2)  %>% 
+  train_dt %>% filter(speed > 2 & speed < 1e2)  %>%
 
   ggplot(aes(speed)) +
 
@@ -255,7 +255,7 @@ train_dt = train_dt %>% mutate(speed=(dist/duration)*3.6)
 ## Feature Engineering
 
 ### Time-related Features
-How time-related factors (hour of day, day of week, and month) affect the trip duration. They might affect trip distance and average speed. 
+How time-related factors (hour of day, day of week, and month) affect the trip duration. They might affect trip distance and average speed.
 
 ```{r}
 for (col in c( "hour", "wday","month")) {
@@ -275,7 +275,7 @@ for (col in c( "hour", "wday","month")) {
   geom_point(size = 4) +
   labs( y = "Total number of pickups") +
   theme(legend.position = "none")
-  
+
   p3 <- train_dt %>%
   group_by_(col) %>%
   summarise(median_speed = median(speed)) %>%
@@ -283,7 +283,7 @@ for (col in c( "hour", "wday","month")) {
   geom_point(size = 4) +
   labs( y = "Median Speed[km/h]") +
   theme(legend.position = "none")
-  
+
   p4 <- train_dt %>%
   group_by_(col) %>%
   summarise(median_dist = median(dist)) %>%
@@ -292,10 +292,10 @@ for (col in c( "hour", "wday","month")) {
   labs( y = "Median Distance [m]") +
   theme(legend.position = "none")
 
-  
+
   layout <- matrix(c(1,2,3,4),2,2,byrow=TRUE)
   multiplot(p1, p2, p3, p4, layout=layout)
-  
+
 }
 
 
@@ -303,7 +303,7 @@ for (col in c( "hour", "wday","month")) {
 
 ### Geo-related Features
 
-How the geo features would affect the trip duration. How pick-up/drop-off location affect the trip duration and speed. 
+How the geo features would affect the trip duration. How pick-up/drop-off location affect the trip duration and speed.
 ```{r}
 p1 = train_dt %>% filter(duration > 0) %>% sample_n(400) %>% ggplot(aes(y = start_lat, x = start_lng, color = duration)) + geom_point() + scale_color_gradient(trans = "log", low = "blue", high = "red") + theme(legend.position = c( 0.8, 0.3))
 
@@ -323,8 +323,8 @@ p1 <- train_dt %>%
   ggplot(aes(bearing, duration)) +
   geom_bin2d(bins = c(100,100)) +
   scale_y_log10() +
-  labs(x = "Bearing", y = "Trip duration") + 
-  coord_polar() + 
+  labs(x = "Bearing", y = "Trip duration") +
+  coord_polar() +
   scale_x_continuous(breaks = seq(-180, 180, by = 45))
 
 p2 <- train_dt %>%
@@ -342,7 +342,7 @@ multiplot(p1, p2, layout=layout)
 ```
 
 
-How distance to airport affects the trip duration and speed. 
+How distance to airport affects the trip duration and speed.
 ```{r}
 jfk_coord <- tibble(lon = -73.778889, lat = 40.639722)
 la_guardia_coord <- tibble(lon = -73.872611, lat = 40.77725)
@@ -365,14 +365,14 @@ for (col in c( "jfk_dist_pick", "jfk_dist_drop","lg_dist_pick", "lg_dist_drop"))
   geom_point() +
   labs( y = "Trip duration [s]") +
   theme(legend.position = "none")  
-  
+
   p2 = train_dt %>%
   sample_n(500) %>%
   ggplot(aes_string(col, "speed")) +
   geom_point() +
   labs( y = "Speed [km/h]") +
   theme(legend.position = "none")
-  
+
   layout <- matrix(c(1,2),1,2,byrow=TRUE)
   multiplot(p1, p2, layout=layout)
 
@@ -380,7 +380,7 @@ for (col in c( "jfk_dist_pick", "jfk_dist_drop","lg_dist_pick", "lg_dist_drop"))
 ```
 ## Outlier
 
-I have exclude data points whose trip duration 10 seconds or longer than a day. 
+I have exclude data points whose trip duration 10 seconds or longer than a day.
 
 
 # Final Feature Engineering
@@ -394,7 +394,7 @@ jfk_coord = tibble(lon = -73.778889, lat = 40.639722)
 la_guardia_coord = tibble(lon = -73.872611, lat = 40.77725)
 
 
-cb_dt = bind_rows(train_dt %>% mutate(dset = "train"), 
+cb_dt = bind_rows(train_dt %>% mutate(dset = "train"),
                    test_dt %>% mutate(dset = "test",
                                      duration = NA))
 cb_dt = cb_dt %>% mutate(dset = factor(dset))
@@ -422,7 +422,7 @@ cb_dt <- cb_dt %>%
          center_latitude = (start_lat + end_lat)/2,
          center_longitude = (start_lng + end_lng)/2
          ) %>%
-  rename(pickup_longitude = start_lng, pickup_latitude = start_lat, 
+  rename(pickup_longitude = start_lng, pickup_latitude = start_lat,
          dropoff_longitude = end_lng, dropoff_latitude = end_lat)
 ```
 ## Time related
@@ -433,7 +433,7 @@ cb_dt = cb_dt %>%
     as_datetime(
       as.POSIXct(start_timestamp, origin="1970-01-01")
       ))
-  ) %>% 
+  ) %>%
   mutate(date = date(pickup_datetime),
          month = month(pickup_datetime),
          wday = wday(pickup_datetime, label = TRUE),
@@ -450,7 +450,7 @@ cb_dt = cb_dt %>%
 Removing trips that taking more than one day or less than 10 seconds.
 
 ```{r}
-cb_dt = cb_dt %>% 
+cb_dt = cb_dt %>%
   filter((dset == "test") | (duration < 24*3600 & duration > 10))
 ```
 
@@ -492,5 +492,3 @@ cb_dt %>% filter(dset == "train") %>% summarise(median(duration)/60)
 ```{r}
 cb_dt %>% filter(dset == "train") %>% mutate(mse = (duration - mean(duration))**2) %>% summarise(sum(mse)^0.5)
 ```
-
-
